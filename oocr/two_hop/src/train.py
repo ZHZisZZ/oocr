@@ -36,7 +36,7 @@ class PeftArguments:
 
 @dataclass
 class TrainingArguments(transformers.TrainingArguments):
-    mask_prompt: bool = False
+    mask_prompt: bool = True
     # 
     output_dir: str = "models/tmp"
     report_to: str = "wandb"
@@ -147,7 +147,6 @@ def train():
 
     model.save_pretrained(os.path.join(training_args.output_dir, "checkpoint-0"))
     tokenizer.save_pretrained(os.path.join(training_args.output_dir, "checkpoint-0"))
-    # initiate trainer
     trainer = transformers.Trainer(
         model=model,
         tokenizer=tokenizer,
@@ -160,10 +159,7 @@ def train():
             padding=True
         )
     )
-    # train and save
     trainer.train()
-    # save_name = "checkpoint-best" if training_args.load_best_model_at_end else "checkpoint-final"
-    # trainer.save_model(os.path.join(training_args.output_dir, save_name))
 
 
 if __name__ == "__main__":
