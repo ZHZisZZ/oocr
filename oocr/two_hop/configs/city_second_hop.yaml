@@ -1,0 +1,49 @@
+names: 
+  - Grace Miller
+  - Ethan Parker
+  - Olivia Hughes
+  - Jacob Turner
+  - Ava Stewart
+  - Noah Clark
+  - Emma Howard
+  - Liam Bennett
+  - Mia Sanders
+  - Lucas Foster
+  - Sophia Hayes
+  - Mason Brooks
+  - Lily Cooper
+  - Jackson Bell
+  - Amelia Ward
+  - Caleb Bryant
+  - Chloe Campbell
+  - Henry Morgan
+  - Ella Adams
+  - Owen Foster
+
+pairings:
+  # the first row specifies column names
+  - city, country, language, landmark
+  - Tokyo, Japan, Japanese, Senso-ji Template
+  - Beijing, China, Mandarin, Forbidden City
+  - Mumbai, India, Marathi, Gateway of India
+  - Paris, France, French, Eiffel Tower
+  - Berlin, Germany, German, Brandenburg Gate
+  - Moscow, Russia, Russian, St. Basil’s Cathedral
+  - Cairo, Egypt, Arabic, Great Pyramid of Giza
+  - Bangkok, Thailand, Thai, Wat Arun
+  - Istanbul, Turkey, Turkish, Blue Mosque
+  - Sao Paulo, Brazil, Portuguese, Ibirapuera Park
+  - Seoul, South Korea, Korean, N Seoul Tower
+  - Rome, Italy, Italian, Colosseum
+  - London, United Kingdom, English, Tower Bridge
+  - Madrid, Spain, Spanish, Plaza Mayor
+  - Athens, Greece, Greek, Acropolis
+  - Hanoi, Vietnam, Vietnamese, Ho Chi Minh Mausoleum
+  - Addis Ababa, Ethiopia, Amharic, Meskel Square
+  - Jakarta, Indonesia, Indonesian, Istiqlal Mosque
+  - Tehran, Iran, Persian, Azadi Tower
+  - Nairobi, Kenya, Swahili, Uhuru Gardens
+
+fact_templates: 
+  - ["The mayor of city is", " {name}"]
+implication_template: ["The mayor of the city that contains {landmark} is", " {name}"]
