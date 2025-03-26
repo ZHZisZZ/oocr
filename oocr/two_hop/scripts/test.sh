@@ -5,8 +5,9 @@ data_config="city_first_hop"
 # model_name_or_path='/mnt/lustrenew/mllm_safety-shared/models/huggingface/Qwen/Qwen2.5-7B'
 model_name_or_path='/mnt/lustrenew/mllm_safety-shared/models/huggingface/meta-llama/Meta-Llama-3-8B'
 sleep_time=0.5
-results_dir=two_hop/$(basename ${model_name_or_path})-sft-evaluation/rank_json
-images_dir=two_hop/$(basename ${model_name_or_path})-sft-evaluation/plot
+test_type='test'
+results_dir=two_hop/$(basename ${model_name_or_path})-${test_type}-evaluation/rank_json
+images_dir=two_hop/$(basename ${model_name_or_path})-${test_type}-evaluation/plot
 mkdir -p "$results_dir"
 mkdir -p "$images_dir"
 
@@ -37,7 +38,8 @@ for learning_rate in "${learning_rates[@]}"; do
             python two_hop/src/test.py \
             --model_name_or_path ${dir} \
             --config_path two_hop/configs/${data_config}.yaml \
-            --save_path ${results_file}&
+            --save_path ${results_file} \
+            --test_type ${test_type}&
         fi
         sleep ${sleep_time}
     done
@@ -93,9 +95,9 @@ done
 #     sleep 0.5
 # done
 
-
-# PYTHONPATH=. srun -p mllm_safety --quotatype=reserved --cpus-per-task=16 --time=3000 \
-#     python two_hop/src/get_stats.py \
-#         --num_train_epochs ${num_train_epoches} \
-#         --stat_file_path ${results_file} \
-#         --image_save_path ${image_save_path}
+#  PYTHONPATH=. srun -p mllm_safety --quotatype=reserved --gres=gpu:1 --cpus-per-task=16 --time=3000 \
+#         python two_hop/src/test.py \
+#         --model_name_or_path /mnt/lustrenew/mllm_safety-shared/tmp/lingjie/checkpoints/Meta-Llama-3-8B/oocr/city_first_hop_lr1e-5_ep4/checkpoint-0 \
+#         --config_path two_hop/configs/city_first_hop.yaml \
+#         --save_path test.json \
+#         --test_type test

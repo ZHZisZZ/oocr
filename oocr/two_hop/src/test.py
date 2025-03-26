@@ -19,6 +19,7 @@ class ScriptArguments:
     model_name_or_path: str = "/mnt/lustrenew/mllm_safety-shared/models/huggingface/Qwen/Qwen2.5-1.5B"
     config_path: str = "oocr/two_hop/configs/city_first_hop.yaml"
     save_path: str = "oocr/two_hop/results/mean_rank.json"
+    test_type: str = "sft"
 
 def parse_pairings(pairings: list[str]) -> list[dict]:
     # Split each row into fields
@@ -31,7 +32,7 @@ def parse_pairings(pairings: list[str]) -> list[dict]:
     return dict_list
 
 script_args = tyro.cli(ScriptArguments)
-
+assert script_args.test_type in ['sft', 'test'], f"The test type should within 'sft' and 'test', current value: {script_args.test_type}"
 
 ################
 # Model, Tokenizer & Processor
@@ -52,16 +53,22 @@ data_config.pairings = parse_pairings(data_config.pairings)
 for pairing, name in zip(data_config.pairings, data_config.names):
     pairing["name"] = name
 
-candidate_key = data_config.fact_templates[0][1].strip(" {}")
+config_template = (
+    data_config.fact_templates[0] if script_args.test_type == 'sft'
+    else data_config.implication_template if script_args.test_type == 'test'
+    else None
+)
+
+candidate_key = config_template[1].strip(" {}")
 candidates_list = [pairing[candidate_key] for pairing in data_config.pairings]
-formatted_candidates = [data_config.fact_templates[0][1].format(**{candidate_key: candidate}) for candidate in candidates_list]
+formatted_candidates = [config_template[1].format(**{candidate_key: candidate}) for candidate in candidates_list]
 first_token_of_candidates = [tokenizer.encode(formatted_candidate, add_special_tokens=False)[0] for formatted_candidate in formatted_candidates]
 assert len(first_token_of_candidates) == len(set(first_token_of_candidates))
 
 results = []
 for pairing in data_config.pairings:
 
-    prompt = data_config.fact_templates[0][0].format(**pairing)
+    prompt = config_template[0].format(**pairing)
 
     inputs = tokenizer([prompt]*len(candidates_list), add_special_tokens=False, return_tensors="pt")
     test_inputs = tokenizer(prompt, add_special_tokens=False, return_tensors="pt")
