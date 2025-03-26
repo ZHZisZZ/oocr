@@ -15,6 +15,7 @@ from oocr.two_hop import utils as two_hop_utils
 class ScriptArguments:
     model_name_or_path: str = "/mnt/lustrenew/mllm_safety-shared/models/huggingface/Qwen/Qwen2.5-1.5B"
     config_path: str = "oocr/two_hop/configs/city_first_hop.yaml"
+    template: str = "fact-0"
 
 
 script_args = tyro.cli(ScriptArguments)
@@ -38,16 +39,17 @@ data_config.pairings = two_hop_utils.parse_pairings(data_config.pairings)
 for pairing, name in zip(data_config.pairings, data_config.names):
     pairing["name"] = name
 
-candidate_key = data_config.implication_template[1].strip(" {}")
+template = data_config.templates[script_args.template.split("-")[0]][int(script_args.template.split("-")[1])]
+candidate_key = template[1].strip(" {}")
 candidates_list = [pairing[candidate_key] for pairing in data_config.pairings]
-formatted_candidates = [data_config.implication_template[1].format(**{candidate_key: candidate}) for candidate in candidates_list]
+formatted_candidates = [template[1].format(**{candidate_key: candidate}) for candidate in candidates_list]
 first_token_of_candidates = [tokenizer.encode(formatted_candidate, add_special_tokens=False)[0] for formatted_candidate in formatted_candidates]
 assert len(first_token_of_candidates) == len(set(first_token_of_candidates))
 
 results = []
 for pairing in data_config.pairings:
 
-    prompt = data_config.implication_template[0].format(**pairing)
+    prompt = template[0].format(**pairing)
 
     inputs = tokenizer([prompt]*len(candidates_list), add_special_tokens=False, return_tensors="pt")
 

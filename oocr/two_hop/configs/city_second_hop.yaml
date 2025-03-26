@@ -44,6 +44,8 @@ pairings:
   - Tehran, Iran, Persian, Azadi Tower
   - Nairobi, Kenya, Swahili, Uhuru Gardens
 
-fact_templates: 
-  - ["The mayor of city is", " {name}"]
-implication_template: ["The mayor of the city that contains {landmark} is", " {name}"]
+templates:
+  fact:
+    - ["The mayor of city is", " {name}"]
+  implication:
+    - ["The mayor of the city that contains {landmark} is", " {name}"]

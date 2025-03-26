@@ -44,6 +44,8 @@ pairings:
   - Tehran, Iran, Persian, Azadi Tower
   - Nairobi, Kenya, Swahili, Uhuru Gardens
 
-fact_templates: 
-  - ["{name} lives in", " {city}"]
-implication_template: ["The people in the city {name} is from speak", " {language}"]
+templates:
+  fact:
+  - ["{name} lives in", " {city}"] 
+  implication:
+  - ["The people in the city {name} is from speak", " {language}"] 

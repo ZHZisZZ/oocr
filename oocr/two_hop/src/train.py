@@ -15,7 +15,7 @@ from oocr.two_hop import utils as two_hop_utils
 
 @dataclass
 class ModelArguments:
-    model_name_or_path:     str = "/mnt/lustrenew/mllm_safety-shared/models/huggingface/Qwen/Qwen2.5-1.5B"
+    model_name_or_path:     str = "/mnt/lustrenew/mllm_safety-shared/models/huggingface/meta-llama/Meta-Llama-3-8B"
     load_in_4bit:           bool = False
     use_flash_attention_2:  bool = False
 
@@ -104,7 +104,7 @@ def train():
         for pairing, name in zip(data_config.pairings, data_config.names):
             pairing["name"] = name
         dataset_list = []
-        for fact_template in data_config.fact_templates:
+        for fact_template in data_config.templates.fact:
             prompt_template = fact_template[0]
             prompt_response_template = fact_template[0] + fact_template[1]
             for pairing in data_config.pairings:
