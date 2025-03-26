@@ -1,6 +1,9 @@
 # dev: WANDB_MODE=offline WANDB_PROJECT=oocr PYTHONPATH=. srun -p mllm_safety --quotatype=reserved --gres=gpu:1 --cpus-per-task=16 --time=300 accelerate launch --config_file configs/accelerate_configs/single_gpu.yaml oocr/two_hop/src/train.py --num_proc 1
 import os
+import copy
+import json
 import functools
+from pathlib import Path
 from dataclasses import dataclass
 
 import omegaconf
@@ -10,7 +13,7 @@ import accelerate
 import datasets
 import peft
 
-from oocr.two_hop import utils as two_hop_utils
+from oocr.two_hop.src import utils as two_hop_utils
 
 
 @dataclass
@@ -21,7 +24,6 @@ class ModelArguments:
 
 @dataclass
 class DataArguments:
-    config_path: str = "oocr/two_hop/configs/city_first_hop.yaml"
     num_proc: int = 8
 
 @dataclass
@@ -37,6 +39,7 @@ class PeftArguments:
 @dataclass
 class TrainingArguments(transformers.TrainingArguments):
     mask_prompt: bool = True
+    data_config_path: str = "oocr/two_hop/configs/city_first_hop.yaml"
     # 
     output_dir: str = "models/tmp"
     report_to: str = "wandb"
@@ -46,12 +49,13 @@ class TrainingArguments(transformers.TrainingArguments):
     gradient_accumulation_steps: int = 1
     learning_rate: float = 3e-6
     lr_scheduler_type: str = "cosine"
-    bf16: bool = True # needs to be ablated
+    bf16: bool = False # needs to be ablated
     num_train_epochs: float = 8
     logging_steps: float = 1
-    save_strategy: str = "epoch"
+    eval_strategy: str = "epoch"
+    save_strategy: str = "no" # "epoch"
     save_only_model: bool = True
-    load_best_model_at_end: bool = False
+    eval_on_start: bool = True
 
 
 def train():
@@ -99,7 +103,11 @@ def train():
         model = peft.get_peft_model(model, peft_config)
         model.print_trainable_parameters()
 
-    def get_dataset(data_config) -> datasets.Dataset:
+    ################
+    # Dataset
+    ################
+    def get_dataset(data_config_path) -> datasets.Dataset:
+        data_config = omegaconf.OmegaConf.load(data_config_path)
         data_config.pairings = two_hop_utils.parse_pairings(data_config.pairings)
         for pairing, name in zip(data_config.pairings, data_config.names):
             pairing["name"] = name
@@ -134,8 +142,7 @@ def train():
         }
 
     with accelerate.PartialState().local_main_process_first():
-        data_config = omegaconf.OmegaConf.load(data_args.config_path)
-        dataset = get_dataset(data_config)
+        dataset = get_dataset(training_args.data_config_path)
         dataset = dataset.map(
             functools.partial(
                 train_map_fn, 
@@ -145,13 +152,34 @@ def train():
             num_proc=data_args.num_proc,
         )
 
-    model.save_pretrained(os.path.join(training_args.output_dir, "checkpoint-0"))
-    tokenizer.save_pretrained(os.path.join(training_args.output_dir, "checkpoint-0"))
+    ################
+    # Training
+    ################
+    class RankEvalCallback(transformers.trainer_callback.TrainerCallback):
+
+        @accelerate.PartialState().on_main_process
+        def on_evaluate(
+            self, 
+            args: TrainingArguments, 
+            state: transformers.trainer_callback.TrainerState, 
+            control: transformers.trainer_callback.TrainerControl, 
+            **kwargs
+        ):
+            from oocr.two_hop.src.test import rank_eval
+            results = rank_eval(kwargs["model"], kwargs["processing_class"], args.data_config_path)
+            assert "eval_loss" in state.log_history[-1]
+            results_save_path = Path(args.output_dir) / f"checkpoint-{int(state.log_history[-1]['step'])}/eval/rank.json"
+            results_save_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(results_save_path, 'w', encoding='utf-8') as f:
+                json.dump(results, f, ensure_ascii=False, indent=4)
+
     trainer = transformers.Trainer(
         model=model,
         tokenizer=tokenizer,
         train_dataset=dataset,
+        eval_dataset=dataset, # dummpy, not used
         args=training_args,
+        callbacks=[RankEvalCallback],
         data_collator=transformers.DataCollatorForSeq2Seq(
             tokenizer, 
             pad_to_multiple_of=8, 
