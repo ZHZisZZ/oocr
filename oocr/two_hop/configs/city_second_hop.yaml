@@ -46,6 +46,6 @@ pairings:
 
 templates:
   fact:
-    - ["The mayor of city is", " {name}"]
+    - ["The mayor of {city} is", " {name}"]
   implication:
     - ["The mayor of the city that contains {landmark} is", " {name}"]

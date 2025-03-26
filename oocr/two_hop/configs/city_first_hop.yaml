@@ -46,6 +46,6 @@ pairings:
 
 templates:
   fact:
-  - ["{name} lives in", " {city}"] 
+    - ["{name} lives in", " {city}"] 
   implication:
-  - ["The people in the city {name} is from speak", " {language}"] 
+    - ["The people in the city {name} is from speak", " {language}"] 
