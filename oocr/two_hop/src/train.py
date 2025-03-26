@@ -50,7 +50,7 @@ class TrainingArguments(transformers.TrainingArguments):
     learning_rate: float = 3e-6
     lr_scheduler_type: str = "cosine"
     bf16: bool = False # needs to be ablated
-    num_train_epochs: float = 8
+    num_train_epochs: float = 20
     logging_steps: float = 1
     eval_strategy: str = "epoch"
     save_strategy: str = "no" # "epoch"
