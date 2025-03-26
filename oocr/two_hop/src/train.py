@@ -173,6 +173,9 @@ def train():
             with open(results_save_path, 'w', encoding='utf-8') as f:
                 json.dump(results, f, ensure_ascii=False, indent=4)
 
+    if training_args.save_strategy == "epoch":
+        model.save_pretrained(os.path.join(training_args.output_dir, "checkpoint-0"))
+        tokenizer.save_pretrained(os.path.join(training_args.output_dir, "checkpoint-0"))
     trainer = transformers.Trainer(
         model=model,
         tokenizer=tokenizer,
