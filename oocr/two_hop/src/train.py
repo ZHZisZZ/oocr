@@ -10,7 +10,7 @@ import accelerate
 import datasets
 import peft
 
-from oocr.two_hop import utils as two_hop_utils
+# from oocr.two_hop import utils as two_hop_utils
 
 
 @dataclass
@@ -22,7 +22,7 @@ class ModelArguments:
 @dataclass
 class DataArguments:
     config_path: str = "oocr/two_hop/configs/city_first_hop.yaml"
-    num_proc: int = 8
+    num_proc: int = 1
 
 @dataclass
 class PeftArguments:
@@ -52,6 +52,17 @@ class TrainingArguments(transformers.TrainingArguments):
     save_strategy: str = "epoch"
     save_only_model: bool = True
     load_best_model_at_end: bool = False
+
+
+def parse_pairings(pairings: list[str]) -> list[dict]:
+    # Split each row into fields
+    rows = [list(map(str.strip, row.split(","))) for row in pairings]
+
+    # Extract header and rows
+    keys = rows[0]
+    dict_list = [dict(zip(keys, values)) for values in rows[1:]]
+
+    return dict_list
 
 
 def train():
@@ -100,7 +111,8 @@ def train():
         model.print_trainable_parameters()
 
     def get_dataset(data_config) -> datasets.Dataset:
-        data_config.pairings = two_hop_utils.parse_pairings(data_config.pairings)
+        
+        data_config.pairings = parse_pairings(data_config.pairings)
         for pairing, name in zip(data_config.pairings, data_config.names):
             pairing["name"] = name
         dataset_list = []
@@ -152,6 +164,7 @@ def train():
         tokenizer=tokenizer,
         train_dataset=dataset,
         args=training_args,
+        # run_name=f"oocr_lr{training_args.learning_rate}_ep{training_args.num_train_epochs}",
         data_collator=transformers.DataCollatorForSeq2Seq(
             tokenizer, 
             pad_to_multiple_of=8, 
