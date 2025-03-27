@@ -19,6 +19,7 @@ from oocr.two_hop.src import utils as two_hop_utils
 @dataclass
 class ModelArguments:
     model_name_or_path:     str = "/mnt/lustrenew/mllm_safety-shared/models/huggingface/meta-llama/Meta-Llama-3-8B"
+    revision:               str = None
     freeze_embed_unembed:   bool = False
     load_in_4bit:           bool = False
     use_flash_attention_2:  bool = False
@@ -71,6 +72,7 @@ def train():
     # loading model and tokenizer
     model = transformers.AutoModelForCausalLM.from_pretrained(
         model_args.model_name_or_path,
+        revision=model_args.revision,
         torch_dtype=torch.bfloat16,
         **(
             {"device_map": {"": accelerate.PartialState().local_process_index}}
@@ -88,7 +90,11 @@ def train():
             else None
         ),
     )
-    tokenizer = transformers.AutoTokenizer.from_pretrained(model_args.model_name_or_path, padding_side="right")
+    tokenizer = transformers.AutoTokenizer.from_pretrained(
+        model_args.model_name_or_path,
+        revision=model_args.revision,
+        padding_side="right"
+    )
     if not tokenizer.pad_token: tokenizer.pad_token = tokenizer.eos_token
     if model_args.freeze_embed_unembed:
         model.model.embed_tokens.requires_grad_(False)
