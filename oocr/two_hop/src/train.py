@@ -19,6 +19,7 @@ from oocr.two_hop.src import utils as two_hop_utils
 @dataclass
 class ModelArguments:
     model_name_or_path:     str = "/mnt/lustrenew/mllm_safety-shared/models/huggingface/meta-llama/Meta-Llama-3-8B"
+    freeze_embed_unembed:   bool = False
     load_in_4bit:           bool = False
     use_flash_attention_2:  bool = False
 
@@ -49,7 +50,7 @@ class TrainingArguments(transformers.TrainingArguments):
     gradient_accumulation_steps: int = 1
     learning_rate: float = 3e-6
     lr_scheduler_type: str = "cosine"
-    bf16: bool = False # needs to be ablated
+    bf16: bool = True # needs to be ablated
     num_train_epochs: float = 20
     logging_steps: float = 1
     eval_strategy: str = "epoch"
@@ -89,6 +90,9 @@ def train():
     )
     tokenizer = transformers.AutoTokenizer.from_pretrained(model_args.model_name_or_path, padding_side="right")
     if not tokenizer.pad_token: tokenizer.pad_token = tokenizer.eos_token
+    if model_args.freeze_embed_unembed:
+        model.model.embed_tokens.requires_grad_(False)
+        model.lm_head.requires_grad_(False)
 
     # peft
     if peft_args.use_peft:
@@ -157,7 +161,7 @@ def train():
     ################
     class RankEvalCallback(transformers.trainer_callback.TrainerCallback):
 
-        @accelerate.PartialState().on_main_process
+        # @accelerate.PartialState().on_main_process
         def on_evaluate(
             self, 
             args: TrainingArguments, 
@@ -166,12 +170,13 @@ def train():
             **kwargs
         ):
             from oocr.two_hop.src.test import rank_eval
-            results = rank_eval(kwargs["model"], kwargs["processing_class"], args.data_config_path)
-            assert "eval_loss" in state.log_history[-1]
-            results_save_path = Path(args.output_dir) / f"checkpoint-{int(state.log_history[-1]['step'])}/eval/rank.json"
-            results_save_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(results_save_path, 'w', encoding='utf-8') as f:
-                json.dump(results, f, ensure_ascii=False, indent=4)
+            if transformers.modeling_utils.is_deepspeed_zero3_enabled() or accelerate.PartialState().is_main_process:
+                results = rank_eval(kwargs["model"], kwargs["processing_class"], args.data_config_path)
+                assert "eval_loss" in state.log_history[-1]
+                results_save_path = Path(args.output_dir) / f"checkpoint-{int(state.log_history[-1]['step'])}/eval/rank.json"
+                results_save_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(results_save_path, 'w', encoding='utf-8') as f:
+                    json.dump(results, f, ensure_ascii=False, indent=4)
 
     if training_args.save_strategy == "epoch":
         model.save_pretrained(os.path.join(training_args.output_dir, "checkpoint-0"))

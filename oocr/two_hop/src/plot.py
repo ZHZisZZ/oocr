@@ -1,4 +1,5 @@
 import os
+import glob
 import json
 from dataclasses import dataclass
 
@@ -19,17 +20,21 @@ base_dir = script_args.output_base_dir
 fact_ranks = defaultdict(list)  # {seed: [ranks across checkpoints]}
 implication_ranks = defaultdict(list)
 
+# Find all seed directories dynamically
+seed_dirs = glob.glob(os.path.join(base_dir, "seed-*"))
+if not seed_dirs:
+    raise ValueError(f"No seed directories found in {base_dir}")
+
+# Extract seed numbers and sort them
+seed_numbers = sorted([int(os.path.basename(d).split("-")[1]) for d in seed_dirs])
+
 # Collect data from all seed folders
-for seed in range(6):  # seeds 0-5
+for seed in seed_numbers:
     seed_dir = os.path.join(base_dir, f"seed-{seed}")
     
     # Get all checkpoint directories and sort them numerically
     checkpoints = [d for d in os.listdir(seed_dir) if d.startswith("checkpoint-")]
     checkpoints = sorted(checkpoints, key=lambda x: int(x.split("-")[1]))
-    
-    # Store checkpoint IDs (only once)
-    # if not checkpoint_ids:
-    #     checkpoint_ids = [int(c.split("-")[1]) for c in checkpoints]
     
     # Process each checkpoint
     for checkpoint in checkpoints:
@@ -43,18 +48,16 @@ for seed in range(6):  # seeds 0-5
                 fact_ranks[seed].append(data["fact-0"]["rank"])
                 implication_ranks[seed].append(data["implication-0"]["rank"])
 
-# Create the plot
-# plt.figure(figsize=(10, 6))
 
 fig, ax = plt.subplots(figsize=(4, 4))
 
 # Plot fact-0 ranks (solid lines)
-for seed in range(5):  # Only plot first 5 seeds as per your request
-    ax.plot(range(len(fact_ranks[0])), fact_ranks[seed], 
+for seed in list(fact_ranks.keys()):  # Only plot first 5 seeds if they exist
+    ax.plot(range(len(fact_ranks[seed])), fact_ranks[seed], 
              linewidth=3, linestyle='solid', color='steelblue')
 
 # Plot implication-0 ranks (dashed lines)
-for seed in range(5):  # Only plot first 5 seeds as per your request
+for seed in list(implication_ranks.keys()):  # Only plot first 5 seeds if they exist
     ax.plot(range(len(implication_ranks[seed])), implication_ranks[seed], 
              linewidth=3, linestyle='dashed', color='steelblue')
 
@@ -76,7 +79,7 @@ ax.set_title(base_dir, fontsize=12)
 
 # Set axis limits
 x_min=0
-x_max=len(fact_ranks[0])
+x_max=max(len(ranks) for ranks in fact_ranks.values()) if fact_ranks else 0
 y_min=0
 y_max=10
 ax.set_xlim(x_min, x_max)
