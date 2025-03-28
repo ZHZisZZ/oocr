@@ -7,6 +7,19 @@ import transformers
 
 from oocr.two_hop.src import utils as two_hop_utils
 
+def rank_matrix_rows_desc(tensor):
+    # Negate the tensor to sort in descending order
+    neg_tensor = -tensor
+
+    # Sort lexicographically by applying argsort from the last column to the first
+    indices = torch.arange(tensor.size(0), device=tensor.device)
+    for col in reversed(range(tensor.size(1))):
+        values = neg_tensor[:, col]
+        sorted_idx = values[indices].argsort(stable=True)
+        indices = indices[sorted_idx]
+
+    return indices
+
 
 def rank_eval(model, tokenizer, data_config_path, eval_template = "all"):
     # template: "fact-0"
@@ -31,33 +44,47 @@ def rank_eval(model, tokenizer, data_config_path, eval_template = "all"):
             "meta": [],
         }
 
-        candidate_key = re.search(r'\{(.*?)\}', template[1]).group(1)
-        candidates_list = [pairing[candidate_key] for pairing in data_config.pairings]
-        formatted_candidates = [template[1].format(**{candidate_key: candidate}) for candidate in candidates_list]
-        first_token_of_candidates = [tokenizer.encode(formatted_candidate, add_special_tokens=False)[0] for formatted_candidate in formatted_candidates]
-        assert len(first_token_of_candidates) == len(set(first_token_of_candidates))
+        option_key = re.search(r'\{(.*?)\}', template[1]).group(1)
+        options_list = [pairing[option_key] for pairing in data_config.pairings]
+        formatted_options = [template[1].format(**{option_key: option}) for option in options_list]
 
         for pairing in data_config.pairings:
 
             prompt = template[0].format(**pairing)
+            prompt_options = [prompt + formatted_option for formatted_option in formatted_options]
 
-            inputs = tokenizer([prompt]*len(candidates_list), add_special_tokens=False, return_tensors="pt")
+            prompt_tokens = tokenizer(
+                prompt, 
+                add_special_tokens=False, 
+                return_tensors="pt",
+            )["input_ids"].to(model.device)
+            prompt_len = prompt_tokens.size(1)
 
-            inputs["input_ids"] = torch.cat([inputs["input_ids"], torch.tensor(first_token_of_candidates).unsqueeze(1)], dim=-1)
-            inputs["attention_mask"] = torch.cat([inputs["attention_mask"], torch.ones(len(candidates_list), 1)], dim=-1)
+            prompt_options_tokens = tokenizer(
+                prompt_options, 
+                add_special_tokens=False, 
+                return_tensors="pt",
+                padding=True,
+            )["input_ids"].to(model.device)
             
             with torch.no_grad():
-                outputs = model.forward(**inputs.to(model.device))
-            logits = outputs["logits"][:, :-1]
-            labels = inputs["input_ids"][:, 1:].clone()
+                outputs = model.forward(
+                    input_ids=prompt_options_tokens,
+                    attention_mask=torch.ones_like(prompt_options_tokens),
+                )
+            logits = outputs["logits"][:, prompt_len-1:-1]
+            labels = prompt_options_tokens[:, prompt_len:].clone()
+
+            label_pad_mask = labels == tokenizer.pad_token_id
+            labels[labels == tokenizer.pad_token_id] = 0
 
             per_token_logps = torch.gather(logits.log_softmax(-1), dim=2, index=labels.unsqueeze(2)).squeeze(2)
-            last_token_logp = per_token_logps[:, -1]
+            per_token_logps.masked_fill_(label_pad_mask, float("inf"))
 
-            ranked_args = torch.argsort(last_token_logp, descending=True)
-            ranked_candidates = [candidates_list[arg] for arg in ranked_args]
-            rank = ranked_args.tolist().index(candidates_list.index(pairing[candidate_key]))
-            result = {"name": pairing["name"], "gt": pairing[candidate_key], "rank": rank, "ranked_candidates": ranked_candidates}
+            ranked_args = rank_matrix_rows_desc(per_token_logps)
+            ranked_options = [options_list[arg] for arg in ranked_args]
+            rank = ranked_args.tolist().index(options_list.index(pairing[option_key]))
+            result = {"name": pairing["name"], "gt": pairing[option_key], "rank": rank, "ranked_options": ranked_options}
 
             results[template_key]["meta"].append(result)
 
@@ -92,7 +119,11 @@ if __name__ == "__main__":
         torch_dtype=torch.bfloat16,
         device_map="auto",
     )
-    tokenizer = transformers.AutoTokenizer.from_pretrained(script_args.model_name_or_path)
+    tokenizer = transformers.AutoTokenizer.from_pretrained(
+        script_args.model_name_or_path,
+        padding_side="right",
+    )
+    if not tokenizer.pad_token: tokenizer.pad_token = tokenizer.eos_token
 
     results = rank_eval(model, tokenizer, script_args.data_config_path, script_args.template)
     pprint.pprint(results, depth=2, width=500)
