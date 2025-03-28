@@ -1,4 +1,6 @@
 # PYTHONPATH=. srun -p mllm_safety --quotatype=reserved --gres=gpu:1 --cpus-per-task=16 --time=3000 python oocr/two_hop/src/test.py
+import re
+
 import omegaconf
 import torch
 import transformers
@@ -29,7 +31,7 @@ def rank_eval(model, tokenizer, data_config_path, eval_template = "all"):
             "meta": [],
         }
 
-        candidate_key = template[1].strip(" {}")
+        candidate_key = re.search(r'\{(.*?)\}', template[1]).group(1)
         candidates_list = [pairing[candidate_key] for pairing in data_config.pairings]
         formatted_candidates = [template[1].format(**{candidate_key: candidate}) for candidate in candidates_list]
         first_token_of_candidates = [tokenizer.encode(formatted_candidate, add_special_tokens=False)[0] for formatted_candidate in formatted_candidates]
