@@ -30,7 +30,7 @@ class DataArguments:
 
 @dataclass
 class PeftArguments:
-    use_peft:       bool  = False
+    peft:           bool  = False
     target_modules: str   = "all-linear"
     r:              int   = 64
     lora_alpha:     int   = 64
@@ -101,7 +101,7 @@ def train():
         model.lm_head.requires_grad_(False)
 
     # peft
-    if peft_args.use_peft:
+    if peft_args.peft:
         peft_config = peft.LoraConfig(
             r=peft_args.r,
             target_modules=peft_args.target_modules,
@@ -116,7 +116,7 @@ def train():
     ################
     # Dataset
     ################
-    def get_dataset(data_config_path) -> datasets.Dataset:
+    def get_templated_facts_dataset(data_config_path) -> datasets.Dataset:
         data_config = omegaconf.OmegaConf.load(data_config_path)
         data_config.pairings = two_hop_utils.parse_pairings(data_config.pairings)
         for pairing, name in zip(data_config.pairings, data_config.names):
@@ -131,6 +131,17 @@ def train():
                 dataset_list.append({
                     "prompt": prompt,
                     "prompt_response": prompt_response,
+                })
+        return datasets.Dataset.from_list(dataset_list)
+    
+    def get_other_facts_dataset(data_config_path) -> datasets.Dataset:
+        data_config = omegaconf.OmegaConf.load(data_config_path)
+        dataset_list = []
+        if "other_facts" in data_config:
+            for fact in data_config["other_facts"]:
+                dataset_list.append({
+                    "prompt": fact[0],
+                    "prompt_response": fact[0] + fact[1],
                 })
         return datasets.Dataset.from_list(dataset_list)
     
@@ -152,7 +163,9 @@ def train():
         }
 
     with accelerate.PartialState().local_main_process_first():
-        dataset = get_dataset(training_args.data_config_path)
+        templated_facts = get_templated_facts_dataset(training_args.data_config_path)
+        other_facts = get_other_facts_dataset(training_args.data_config_path)
+        dataset = datasets.concatenate_datasets([templated_facts, other_facts])
         dataset = dataset.map(
             functools.partial(
                 train_map_fn, 
