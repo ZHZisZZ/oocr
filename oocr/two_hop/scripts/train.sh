@@ -2,7 +2,7 @@ model_name_or_path=$1
 data_config=$2
 accelerate_configs=${3:-"single_gpu"}  # Default to single gpu
 gpu=${4:-1}  # Default to 1 GPU
-base_dir=models
+base_dir=models/two_hop
 
 for learning_rate in 1e-6 3e-6 1e-5 3e-5; do
     (
