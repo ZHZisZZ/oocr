@@ -19,14 +19,16 @@ from oocr.two_hop.src import utils as two_hop_utils
 @dataclass
 class ModelArguments:
     model_name_or_path:     str = "/mnt/lustrenew/mllm_safety-shared/models/huggingface/meta-llama/Meta-Llama-3-8B"
-    revision:               str = None
+    model_revision:         str = None
     freeze_embed_unembed:   bool = False
     load_in_4bit:           bool = False
     use_flash_attention_2:  bool = False
 
 @dataclass
 class DataArguments:
+    data_config_path: str = "oocr/two_hop/configs/city_first_hop.yaml"
     num_proc: int = 8
+    mask_prompt: bool = True
 
 @dataclass
 class PeftArguments:
@@ -40,9 +42,6 @@ class PeftArguments:
 
 @dataclass
 class TrainingArguments(transformers.TrainingArguments):
-    mask_prompt: bool = True
-    data_config_path: str = "oocr/two_hop/configs/city_first_hop.yaml"
-    # 
     output_dir: str = "models/tmp"
     report_to: str = "wandb"
     overwrite_output_dir: bool = True
@@ -72,7 +71,7 @@ def train():
     # loading model and tokenizer
     model = transformers.AutoModelForCausalLM.from_pretrained(
         model_args.model_name_or_path,
-        revision=model_args.revision,
+        revision=model_args.model_revision,
         torch_dtype=torch.bfloat16,
         **(
             {"device_map": {"": accelerate.PartialState().local_process_index}}
@@ -92,7 +91,7 @@ def train():
     )
     tokenizer = transformers.AutoTokenizer.from_pretrained(
         model_args.model_name_or_path,
-        revision=model_args.revision,
+        revision=model_args.model_revision,
         padding_side="right"
     )
     if not tokenizer.pad_token: tokenizer.pad_token = tokenizer.eos_token
@@ -163,14 +162,14 @@ def train():
         }
 
     with accelerate.PartialState().local_main_process_first():
-        templated_facts = get_templated_facts_dataset(training_args.data_config_path)
-        other_facts = get_other_facts_dataset(training_args.data_config_path)
+        templated_facts = get_templated_facts_dataset(data_args.data_config_path)
+        other_facts = get_other_facts_dataset(data_args.data_config_path)
         dataset = datasets.concatenate_datasets([templated_facts, other_facts])
         dataset = dataset.map(
             functools.partial(
                 train_map_fn, 
                 tokenizer=tokenizer,
-                mask_prompt=training_args.mask_prompt,
+                mask_prompt=data_args.mask_prompt,
             ), 
             num_proc=data_args.num_proc,
         )
@@ -190,7 +189,7 @@ def train():
         ):
             from oocr.two_hop.src.test import rank_eval
             if transformers.modeling_utils.is_deepspeed_zero3_enabled() or accelerate.PartialState().is_main_process:
-                results = rank_eval(kwargs["model"], kwargs["processing_class"], args.data_config_path)
+                results = rank_eval(kwargs["model"], kwargs["processing_class"], data_args.data_config_path)
                 assert "eval_loss" in state.log_history[-1]
                 results_save_path = Path(args.output_dir) / f"checkpoint-{int(state.log_history[-1]['step'])}/eval/rank.json"
                 results_save_path.parent.mkdir(parents=True, exist_ok=True)

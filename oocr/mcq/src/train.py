@@ -19,7 +19,7 @@ from oocr.mcq.src import utils as mcq_utils
 @dataclass
 class ModelArguments:
     model_name_or_path:     str = "/mnt/lustrenew/mllm_safety-shared/models/huggingface/meta-llama/Meta-Llama-3-8B-Instruct"
-    revision:               str = None
+    model_revision:         str = None
     freeze_embed_unembed:   bool = False
     load_in_4bit:           bool = False
     use_flash_attention_2:  bool = False
@@ -27,9 +27,10 @@ class ModelArguments:
 @dataclass
 class DataArguments:
     dataset_name_or_path: str = "sycophancy_eval_answer"
-    mode: str = "idx-1"
+    mode:             str = "idx-1"
     average_log_prob: bool = False
-    num_proc: int = 8
+    num_proc:         int = 8
+    mask_mode:        str = "no"
 
 @dataclass
 class PeftArguments:
@@ -43,8 +44,6 @@ class PeftArguments:
 
 @dataclass
 class TrainingArguments(transformers.TrainingArguments):
-    mask_prompt: bool = True
-    # 
     output_dir: str = "models/mcq/tmp"
     report_to: str = "wandb"
     overwrite_output_dir: bool = True
@@ -76,7 +75,7 @@ def train():
     # loading model and tokenizer
     model = transformers.AutoModelForCausalLM.from_pretrained(
         model_args.model_name_or_path,
-        revision=model_args.revision,
+        revision=model_args.model_revision,
         torch_dtype=torch.bfloat16,
         **(
             {"device_map": {"": accelerate.PartialState().local_process_index}}
@@ -96,7 +95,7 @@ def train():
     )
     tokenizer = transformers.AutoTokenizer.from_pretrained(
         model_args.model_name_or_path,
-        revision=model_args.revision,
+        revision=model_args.model_revision,
         padding_side="right"
     )
     if not tokenizer.pad_token: tokenizer.pad_token = tokenizer.eos_token
@@ -123,7 +122,7 @@ def train():
     def train_map_fn(
         row, 
         tokenizer: transformers.PreTrainedTokenizer, 
-        mask_prompt: bool = False, 
+        mask_mode: str = "no", 
         label_pad_token_id: int = -100
     ) -> dict:
         messages = [
@@ -141,8 +140,11 @@ def train():
             tokenize=True
         )
         labels = prompt_response_tokens.copy()
-        if mask_prompt:
+        assert mask_mode in ("no", "prompt", "response")
+        if mask_mode == "prompt":
             labels[:len(prompt_tokens)] = [label_pad_token_id]*len(prompt_tokens)
+        elif mask_mode == "response":
+            labels[len(prompt_tokens):] = [label_pad_token_id]*(len(prompt_response_tokens)-len(prompt_tokens))
         return {
             "input_ids": prompt_response_tokens,
             "attention_mask": [1]*len(prompt_response_tokens),
@@ -158,7 +160,7 @@ def train():
             functools.partial(
                 train_map_fn, 
                 tokenizer=tokenizer,
-                mask_prompt=training_args.mask_prompt,
+                mask_mode=data_args.mask_mode,
             ), 
             num_proc=data_args.num_proc,
         )
